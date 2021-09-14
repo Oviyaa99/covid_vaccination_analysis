@@ -1,0 +1,234 @@
+---
+title: "Covid Vaccination Analysis project"
+author: "Oviyaa"
+date: "31/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+Task Details Following are the inspirations to work in this dataset :
+
+How many states have fully vaccinated?
+What is the number of positive cases rising in India?
+Which states are more affected by the virus?
+Analyze to show insights regarding coronavirus
+
+1.Install Packages
+```{r}
+
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+```
+2.Read Input file and store it in dataframe
+```{r}
+############################# Read Covid_19_india data into the datatframe Covid19India #######################################
+print("Read Covid_19_india data into the dataframe Covid19India\n")
+Covid19India <- read_csv('~/R/data/covid19_data/covid_19_india.csv')
+print("How does the data look like")
+head(Covid19India)
+print("The columns in the data")
+colnames(Covid19India)
+
+print("We can drop 2 columns ['ConfirmedIndianNational', 'ConfirmedForeignNational']\n")
+Covid19India <- subset(Covid19India, select = -c(ConfirmedIndianNational, ConfirmedForeignNational))
+head(Covid19India)
+
+Covid19India['Date'] = as.POSIXct(Covid19India$Date, format = '%Y-%m-%d')
+print("No of States: ")
+#number of unique states
+length(unique(Covid19India$State))
+
+Covid19India<- rename(Covid19India,"State" = "State/UnionTerritory")
+
+Covid19India$State
+
+print("The states are: ")
+#unique indian states
+unique(Covid19India$State)
+```
+There are 2 instances of 'State' that we shall drop, 'Cases being reassigned to states' and 'Unassigned'
+```{r}
+
+Covid19India<-Covid19India[!grepl('Unassigned',Covid19India$State),]
+Covid19India<-Covid19India[!grepl('Cases being reassigned to states',Covid19India$State),]
+
+print("After dropping 'Cases being reassigned to states' and 'Unassigned,the dataframe has :")
+str(Covid19India)
+```
+
+Sorting Covid19India in descending order of 'Date' and 'Confirmed' into Covid19ToDate
+```{r}
+Covid19ToDate <- Covid19India[order(Covid19India$Date,Covid19India$Confirmed),decreasing =TRUE]
+
+Covid19ToDate <- subset(Covid19ToDate, select = -c(Sno))
+head(Covid19ToDate)
+```
+
+Plot the curve of Confirmed, Cured and Death cases in India from Feb 2020 till date
+```{r}
+Covid19ByDay <- Covid19ToDate %>% group_by(Date) %>% summarise_at(vars(Cured,Deaths,Confirmed),list(sum)) 
+Covid19ByDay$CuredPerDay= Covid19ByDay$Cured - lag(Covid19ByDay$Cured,1,default = NA)
+Covid19ByDay$DeathsPerDay  = Covid19ByDay$Deaths -lag(Covid19ByDay$Deaths,1,reminder = TRUE)
+Covid19ByDay$ConfirmedPerDay  = Covid19ByDay$Confirmed -lag(Covid19ByDay$Confirmed,1,reminder = TRUE)
+Covid19ByDay
+View(Covid19ByDay)
+
+Covid19ByDay = filter(Covid19ByDay,Covid19ByDay$Date >= '2020-02-01')
+
+##Visualization using ggplot
+ggplot(data = Covid19ByDay) + geom_line(mapping=aes(x=Date,y=Confirmed, color = 'dodgerblue'))+geom_line(mapping=aes(x=Date,y=Cured, color = 'green'))+geom_line(mapping=aes(x=Date,y=Deaths, color = 'red'))+ labs(y ="Cumulative graph In Crores", fontsize=16)
+
+Covid19ByDay1 = filter(Covid19ByDay,Covid19ByDay$Date >= '2021-01-01')
+
+##Visualization using ggplot
+ggplot(data = Covid19ByDay1) + geom_line(mapping=aes(x=Date,y=Confirmed, color = 'dodgerblue'))+geom_line(mapping=aes(x=Date,y=Cured, color = 'green'))+geom_line(mapping=aes(x=Date,y=Deaths, color = 'red'))+ labs(y ="Cumulative graph In Crores", fontsize=16)
+
+Latest_date <- max(Covid19ToDate$Date)
+CovidWorstStates <- Covid19ToDate %>% filter(Date == Latest_date)
+nrow(CovidWorstStates)
+
+CovidWorstStates<- CovidWorstStates[order(-CovidWorstStates$Confirmed),]
+CovidWorstStates
+
+CovidWorstStates_5 <- head(CovidWorstStates,5)
+CovidWorstStates_5
+
+ggplot(data = CovidWorstStates_5,mapping=aes(x=State,y=Confirmed,fill=State)) + geom_bar(stat="identity")+ labs(y ="Bar graph on which state affected most", fontsize=16)+theme(axis.text.x = element_text(angle=90)) 
+
+
+barplot(CovidWorstStates_5$Confirmed,names.arg=CovidWorstStates_5$State,xlab="States",ylab="Confirmed Cases", col="blue")
+
+barplot(CovidWorstStates_5$Cured,names.arg=CovidWorstStates_5$State,xlab="States",ylab="Cured Cases", col="blue")
+
+barplot(CovidWorstStates_5$Deaths,names.arg=CovidWorstStates_5$State,xlab="States",ylab="Death Cases", col="blue")
+```
+Read covid_vaccine_statewise.csv
+```{r}
+covid_vaccine_statewise <- read_csv("~/R/data/covid19_data/covid_vaccine_statewise.csv")
+head(covid_vaccine_statewise)
+colnames(covid_vaccine_statewise)
+str(covid_vaccine_statewise)
+CovidVaccine <-covid_vaccine_statewise
+```
+##Data Preparation
+```{r}
+
+#Rename columns
+
+CovidVaccine<-rename(CovidVaccine,'Date'='Updated On',
+                                          'TotalVaccinated'=  'Total Individuals Vaccinated' ,
+                                           'FirstDose'='First Dose Administered',
+                                           'SecondDose' = 'Second Dose Administered',
+                                           'Male'='Male(Individuals Vaccinated)',
+                                           'Female'='Female(Individuals Vaccinated)',
+                                           'Transgender'='Transgender(Individuals Vaccinated)',
+                                          'TotalCovaxin'= 'Covaxin (Doses Administered)',
+                                           'TotalCoviShield'='CoviShield (Doses Administered)')
+
+#no of not null values
+colSums(is.na(CovidVaccine))
+
+################################# We drop the rows with Nan values in 'TotalVaccinated' ######################################
+CovidVaccine <- CovidVaccine %>% drop_na(TotalVaccinated)
+
+################################## Convert datetime and get the latest date #################################################
+CovidVaccine$Date = as.POSIXct(CovidVaccine$Date, format = "%d/%m/%Y") 
+head(CovidVaccine)
+
+latest_date = max(CovidVaccine$Date)
+
+print("Latest Date : ") 
+latest_date
+```
+
+```{r}
+unique(CovidVaccine$State)
+#number of unique states
+length(unique(CovidVaccine$State))
+
+
+filter(CovidVaccine,State == "Dadra and Nagar Haveli and Daman and Diu")
+
+filter(CovidVaccine,State == "Jammu and Kashmir + Ladakh")
+
+############################################################################################################################
+##################### We change the name of CovidVaccine.State to match with StatePop.State ################################
+
+CovidVaccine$State[920:1031] = 'Dadra and Nagar Haveli & Daman and Diu'
+CovidVaccine$State[1610:1723] = 'Jammu and Kashmir + Ladakh'
+CovidVaccine$State[2990:3103] = 'Orissa'
+```
+
+```{r}
+print("After some data cleaning and organising, the rows with Nan values")
+colSums(is.na(CovidVaccine))
+```
+##Covid Vaccine Viualization
+```{r}
+CovidVaccine_plot<-CovidVaccine %>% filter(CovidVaccine$State=="India")
+
+ggplot(data=CovidVaccine_plot)+geom_line(mapping = aes(x=Date, y=TotalVaccinated))
+```
+##How the Better Vaccinated States are doing in the Corona 
+```{r}
+CovidVaccine_state_group <- CovidVaccine %>% filter(Date==latest_date)
+CovidVaccine_state_group 
+```
+
+Delete Row with India store it in a variable
+```{r}
+CovidVaccine_India <- CovidVaccine %>% filter(State=="India",Date==latest_date)
+CovidVaccine_India
+
+##Delete India as row in CovidVaccine_state_group 
+CovidVaccine_state_group <- CovidVaccine_state_group[!(CovidVaccine_state_group$State=="India"),]
+
+#List State names and Total vaccinated count
+CovidVaccine_state_Vacc_count<-CovidVaccine_state_group %>% select(State,TotalVaccinated)
+CovidVaccine_state_Vacc_count
+
+#Arrange the states in descending order
+CovidVaccine_state_Vacc_count<- CovidVaccine_state_Vacc_count[order(-CovidVaccine_state_Vacc_count$TotalVaccinated),]
+CovidVaccine_state_Vacc_count
+
+#Top 10 Vaccinates States in India
+top_10_vacc=head(CovidVaccine_state_Vacc_count,10)
+top_10_vacc
+```
+##Viz of top 10 vaccinated States
+```{r}
+
+ggplot(data=top_10_vacc,mapping = aes(x=State,y=TotalVaccinated,fill=TotalVaccinated))+ geom_bar(stat="identity")+ theme(axis.text.x = element_text(angle=90), plot.title = element_text(hjust = 0.5)) + labs(title = "Top 10 vaccinated States",subtitle = "Analysis done as per latest_date",caption=latest_date)+geom_text(aes(x = State, y = TotalVaccinated, label = TotalVaccinated)) + coord_flip() 
+```
+## How the Better Vaccinated States are doing in the Corona 
+```{r}
+CovidStates_cases<- CovidWorstStates[order(-CovidWorstStates$Confirmed),]
+#CovidStates_cases-> has list of states with confimed, cured, death number
+#CovidVaccine_state_group -> has list of last states with total vaccinated count
+CovidStates_cases
+CovidVaccine_state_group
+
+#merge two datasets based on state name
+CovidVaccine_merge<-merge(CovidVaccine_state_group, CovidStates_cases, by.x="State", by.y="State")
+CovidVaccine_merge<-CovidVaccine_merge[order(CovidVaccine_merge$TotalVaccinated),]
+
+#Viz TotalVaccinated vs Confirmed
+print("How the Better Vaccinated States are doing in Corona?\n")
+
+ggplot(head(CovidVaccine_merge,10)) + 
+  geom_bar(mapping = aes(x = State, y = TotalVaccinated,fill=TotalVaccinated), stat = "identity", position = "dodge") + 
+  geom_bar(mapping = aes(x = State, y = Confirmed, fill=Confirmed), stat = "identity", position = "dodge") + coord_flip()+labs(title="Top 10 vaccinated states vs Covid Confirmed cases")
+
+ggplot(tail(CovidVaccine_merge,5)) + 
+  geom_bar(mapping = aes(x = State, y = TotalVaccinated,fill=TotalVaccinated), stat = "identity", position = "dodge") + 
+  geom_bar(mapping = aes(x = State, y = Confirmed, fill=Confirmed), stat = "identity", position = "dodge") + coord_flip()+labs(title="Last 10 vaccinated states vs Covid Confirmed cases")
+```
+
+
